@@ -3,10 +3,15 @@ kind: Kustomization
 
 namespace: automount-nfs-poc
 
+images:
+- name: quay.io/a13x22/toolbox-container
+  newTag: basic
+
 configMapGenerator:
 - name: nfs-server-init
   files:
   - init.sh
+  - users.csv
 
 resources:
 - nfs-server-deploy.yaml

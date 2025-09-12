@@ -25,12 +25,13 @@ requiredDropCapabilities:
 - SETUID
 - SETGID
 runAsUser:
-  type: MustRunAsRange
+  type: RunAsAny
 seLinuxContext:
-  type: MustRunAs
+  type: RunAsAny
 supplementalGroups:
   type: RunAsAny
-users: []
+users:
+- system:serviceaccount:automount-nfs-poc:test-pod
 volumes:
 - configMap
 - downwardAPI

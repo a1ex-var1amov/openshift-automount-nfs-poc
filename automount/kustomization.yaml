@@ -3,6 +3,10 @@ kind: Kustomization
 
 namespace: automount-nfs-poc
 
+images:
+- name: quay.io/a13x22/toolbox-container
+  newTag: basic
+
 configMapGenerator:
 - name: automount-run
   files:
@@ -11,6 +15,7 @@ configMapGenerator:
   files:
   - extra.autofs
   - extra.nfs
+  - auto.home
 
 resources:
 - automount-ds.yaml

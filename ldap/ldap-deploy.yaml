@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ldap
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ldap
+  template:
+    metadata:
+      labels:
+        app: ldap
+    spec:
+      serviceAccountName: ldap
+      containers:
+      - name: openldap
+        image: osixia/openldap:1.5.0
+        imagePullPolicy: Always
+        env:
+        - name: LDAP_ORGANISATION
+          value: Example Org
+        - name: LDAP_DOMAIN
+          value: example.org
+        - name: LDAP_ADMIN_PASSWORD
+          value: adminpassword
+        - name: LDAP_TLS
+          value: "false"
+        - name: LDAP_READONLY_USER
+          value: "false"
+        - name: LDAP_LISTEN_URLS
+          value: ldap://0.0.0.0:389
+        ports:
+        - containerPort: 389
+          name: ldap
+        volumeMounts:
+        - name: bootstrap
+          mountPath: /ldifs/bootstrap.ldif
+          subPath: bootstrap.ldif
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - /bin/bash
+              - -lc
+              - |
+                for i in {1..60}; do nc -z 127.0.0.1 389 && break || sleep 1; done
+                ldapadd -x -H ldap://127.0.0.1:389 -D "cn=admin,dc=example,dc=org" -w adminpassword -f /ldifs/bootstrap.ldif || true
+        securityContext:
+          runAsUser: 911
+          runAsGroup: 911
+      volumes:
+      - name: bootstrap
+        configMap:
+          name: ldap-bootstrap
+

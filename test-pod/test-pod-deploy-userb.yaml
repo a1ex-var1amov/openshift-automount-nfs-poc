@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-pod-userb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-pod-userb
+  template:
+    metadata:
+      labels:
+        app: test-pod-userb
+    spec:
+      securityContext:
+        runAsUser: 2002
+        runAsGroup: 2002
+      containers:
+      - name: test-pod
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        workingDir: /tmp
+        command: ["/bin/bash","-lc"]
+        args:
+        - |
+          id
+          ls -la /home
+          echo $(date) hello from userb:$HOSTNAME >> /home/userb/hello.txt
+          echo $(date) hello shared from userb:$HOSTNAME >> /home/xyz/hello.txt
+          sleep infinity
+        volumeMounts:
+        - name: host-home
+          mountPath: /home
+          mountPropagation: HostToContainer
+        - name: automount-conf
+          mountPath: /etc/auto.home
+          subPath: auto.home
+        - name: list-home-users
+          mountPath: /toolbox/list-home-users.sh
+          subPath: list-home-users.sh
+        - name: users-csv
+          mountPath: /toolbox/users.csv
+          subPath: users.csv
+      serviceAccountName: test-pod
+      volumes:
+      - name: host-home
+        hostPath:
+          path: /var/mnt/home
+      - name: automount-conf
+        configMap:
+          name: automount-conf-h6gk7hct9g
+      - name: list-home-users
+        configMap:
+          name: list-home-users
+      - name: users-csv
+        configMap:
+          name: nfs-server-init-ftk5687cbh
+

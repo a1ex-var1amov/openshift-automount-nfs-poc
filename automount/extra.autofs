@@ -1,1 +1,2 @@
 /mnt/automount /etc/extra.nfs
+/var/mnt/home /etc/auto.home

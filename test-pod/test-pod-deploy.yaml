@@ -12,16 +12,23 @@ spec:
       labels:
         app: test-pod
     spec:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
       containers:
       - name: test-pod
-        image: quay.io/noseka1/openshift-toolbox:basic
+        image: quay.io/a13x22/toolbox-container:basic
         imagePullPolicy: Always
+        workingDir: /tmp
         volumeMounts:
         - name: init
           mountPath: /toolbox
         - name: host
           mountPath: /mnt
           # HostToContainer mount propagation is required
+          mountPropagation: HostToContainer
+        - name: host-home
+          mountPath: /home
           mountPropagation: HostToContainer
       serviceAccountName: test-pod
       volumes:
@@ -31,3 +38,6 @@ spec:
       - name: host
         hostPath:
           path: /var/mnt
+      - name: host-home
+        hostPath:
+          path: /var/mnt/home

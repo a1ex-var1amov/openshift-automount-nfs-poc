@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: automount
-        image: quay.io/noseka1/openshift-toolbox:basic
+        image: quay.io/a13x22/toolbox-container:basic
         imagePullPolicy: Always
         securityContext:
           privileged: true
@@ -26,8 +26,11 @@ spec:
         - name: conf
           mountPath: /etc/extra.nfs
           subPath: extra.nfs
+        - name: conf
+          mountPath: /etc/auto.home
+          subPath: auto.home
         - name: host
-          mountPath: /mnt
+          mountPath: /var/mnt
           # Bidirectional mount propagation is required
           mountPropagation: Bidirectional
       serviceAccountName: automount

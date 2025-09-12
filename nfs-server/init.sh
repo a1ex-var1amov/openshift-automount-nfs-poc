@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# Install nfs server utils
-dnf install nfs-utils -y
+# Install nfs server utils and ldap clients
+dnf install nfs-utils openldap-clients -y
 
 # Make nfsd filesystem available with the container
 mount -t nfsd nfds /proc/fs/nfsd
 
 # Start nfs daemons
 /usr/sbin/rpcbind -w
-/usr/sbin/rpc.mountd -N 2 -V 3
-/usr/sbin/rpc.nfsd -G 10 -N 2 -V 3
+/usr/sbin/rpc.mountd -N 4 -V 4
+/usr/sbin/rpc.nfsd -G 10 -N 4 -V 4
 /usr/sbin/rpc.statd --no-notify
 
 # Create directories
@@ -22,8 +22,30 @@ for CITY in dallas tucson sandiego; do
   echo $CITY > /exports/$CITY/$CITY.txt
 done
 
+# Create sample home directories and set ownership from users.csv
+if [ -f /toolbox/users.csv ]; then
+  while IFS=, read -r USERNAME USER_UID USER_GID; do
+    [ -z "$USERNAME" ] && continue
+    mkdir -p "/exports/home/$USERNAME"
+    chmod 755 "/exports/home/$USERNAME"
+    chown ${USER_UID}:${USER_GID} "/exports/home/$USERNAME"
+    touch "/exports/home/$USERNAME/.placeholder"
+  done < /toolbox/users.csv
+fi
+
+# Shared tooling directory
+mkdir -p /exports/home/xyz
+chmod 777 /exports/home/xyz
+
+# If LDAP is available, generate users.csv from LDAP
+if getent hosts ldap.automount-nfs-poc.svc.cluster.local &>/dev/null; then
+  ldapsearch -x -H ldap://ldap.automount-nfs-poc.svc.cluster.local:389 -b dc=example,dc=org "(objectClass=posixAccount)" uid uidNumber gidNumber homeDirectory \
+    | awk '/^uid: /{u=$2}/^uidNumber: /{uid=$2}/^gidNumber: /{gid=$2}/^homeDirectory: /{home=$2} /^$/{if(u&&uid&&gid){print u","uid","gid; u=uid=gid=home=""}} END{if(u&&uid&&gid){print u","uid","gid}}' > /toolbox/users.csv || true
+fi
+
 # Add the exports directory to the list of exported dirs
 echo "/exports *(rw,fsid=0,async,root_squash)" > /etc/exports.d/city.exports
+echo "/exports/home *(rw,async,root_squash)" > /etc/exports.d/home.exports
 
 # Export city directory via nfs
 exportfs -r

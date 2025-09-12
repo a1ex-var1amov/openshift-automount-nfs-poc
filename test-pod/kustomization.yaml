@@ -3,6 +3,10 @@ kind: Kustomization
 
 namespace: automount-nfs-poc
 
+images:
+- name: quay.io/a13x22/toolbox-container
+  newTag: basic
+
 configMapGenerator:
 - name: test-pod-init
   files:
@@ -11,6 +15,8 @@ configMapGenerator:
 resources:
 - restricted-hostpath-scc.yaml
 - test-pod-deploy.yaml
+- test-pod-deploy-usera.yaml
+- test-pod-deploy-userb.yaml
 - test-pod-sa.yaml
 - test-pod-scc-rolebinding.yaml
 - test-pod-scc-role.yaml

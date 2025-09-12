@@ -1,0 +1,55 @@
+dn: uid=usera,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: posixAccount
+cn: User A
+sn: A
+uid: usera
+uidNumber: 2001
+gidNumber: 2001
+homeDirectory: /home/usera
+loginShell: /bin/bash
+
+dn: uid=userb,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: posixAccount
+cn: User B
+sn: B
+uid: userb
+uidNumber: 2002
+gidNumber: 2002
+homeDirectory: /home/userb
+loginShell: /bin/bash
+
+dn: uid=userc,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: posixAccount
+cn: User C
+sn: C
+uid: userc
+uidNumber: 2003
+gidNumber: 2003
+homeDirectory: /home/userc
+loginShell: /bin/bash
+
+dn: uid=userd,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: posixAccount
+cn: User D
+sn: D
+uid: userd
+uidNumber: 2004
+gidNumber: 2004
+homeDirectory: /home/userd
+loginShell: /bin/bash
+
+dn: uid=usere,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: posixAccount
+cn: User E
+sn: E
+uid: usere
+uidNumber: 2005
+gidNumber: 2005
+homeDirectory: /home/usere
+loginShell: /bin/bash
+
