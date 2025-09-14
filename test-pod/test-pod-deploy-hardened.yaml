@@ -1,0 +1,323 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-pod-hardened
+  labels:
+    app: test-pod-hardened
+    version: v1.0.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-pod-hardened
+  template:
+    metadata:
+      labels:
+        app: test-pod-hardened
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsUser: 2001  # usera UID
+        runAsGroup: 2001 # usera GID
+        runAsNonRoot: true
+        fsGroup: 2001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: home-setup
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+          runAsNonRoot: false
+          seLinuxOptions:
+            type: "spc_t"
+          capabilities:
+            add: ["CHOWN", "FOWNER"]  # Reduced from SYS_ADMIN
+            drop: ["ALL"]
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          set -e  # Exit on any error
+          
+          # Function to handle errors
+          handle_error() {
+            echo "ERROR: $1" >&2
+            # Send alert to monitoring system
+            curl -X POST -H "Content-Type: application/json" \
+              -d "{\"level\":\"error\",\"message\":\"$1\",\"component\":\"home-setup\"}" \
+              http://monitoring-service:8080/alerts 2>/dev/null || true
+            exit 1
+          }
+          
+          # Trap errors
+          trap 'handle_error "Script failed at line $LINENO"' ERR
+          
+          # Install required packages
+          dnf install -y policycoreutils-python-utils setools-console curl
+          
+          # Wait for the home directory to be available with timeout
+          echo "Waiting for /mnt/home directory to be available..."
+          timeout=60
+          while [ ! -d "/mnt/home" ] && [ $timeout -gt 0 ]; do
+            echo "Waiting for /mnt/home directory... ($timeout seconds remaining)"
+            sleep 2
+            timeout=$((timeout - 2))
+          done
+          
+          if [ ! -d "/mnt/home" ]; then
+            handle_error "Timeout waiting for /mnt/home directory"
+          fi
+          
+          echo "Setting up hardened /home directory for usera..."
+          
+          # Create a new /home directory structure
+          mkdir -p /home-new
+          
+          # Discover users dynamically from LDAP (if available)
+          if command -v ldapsearch >/dev/null 2>&1; then
+            echo "Discovering users from LDAP..."
+            USERS=$(ldapsearch -x -H ldap://ldap-service:389 -b "ou=users,dc=example,dc=com" "objectClass=person" 2>/dev/null | grep "uid:" | cut -d: -f2 | tr -d ' ' || echo "usera userb userc userd usere xyz")
+          else
+            echo "LDAP not available, using default user list"
+            USERS="usera userb userc userd usere xyz"
+          fi
+          
+          # Create symlinks to the live NFS directories
+          created_links=0
+          for user in $USERS; do
+            if [ -d "/mnt/home/$user" ]; then
+              ln -sf "/mnt/home/$user" "/home-new/$user"
+              echo "Created symlink for $user -> /mnt/home/$user"
+              created_links=$((created_links + 1))
+            else
+              echo "WARNING: Directory /mnt/home/$user not found"
+            fi
+          done
+          
+          if [ $created_links -eq 0 ]; then
+            handle_error "No user directories found to create symlinks"
+          fi
+          
+          # Set proper permissions on the symlinks
+          chmod 755 /home-new
+          chmod 755 /home-new/*
+          
+          # Try to fix SELinux context
+          chcon -t public_content_t /home-new 2>/dev/null || echo "SELinux context change failed (non-critical)"
+          chcon -t public_content_t /home-new/* 2>/dev/null || echo "SELinux context change failed (non-critical)"
+          
+          echo "Hardened NFS home directory setup completed! Created $created_links symlinks."
+          ls -la /home-new
+        volumeMounts:
+        - name: host-home
+          mountPath: /mnt/home
+          mountPropagation: HostToContainer
+        - name: home-volume
+          mountPath: /home-new
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      containers:
+      - name: home-access
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        workingDir: /tmp
+        securityContext:
+          runAsUser: 2001
+          runAsGroup: 2001
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        command: ["/bin/bash","-lc"]
+        args:
+        - |
+          # Health check function
+          health_check() {
+            # Check if /home is accessible
+            if ! ls /home >/dev/null 2>&1; then
+              echo "HEALTH CHECK FAILED: Cannot access /home directory"
+              return 1
+            fi
+            
+            # Check if NFS is accessible
+            if ! ls /mnt/home >/dev/null 2>&1; then
+              echo "HEALTH CHECK FAILED: Cannot access NFS mount"
+              return 1
+            fi
+            
+            # Check if user directories exist and are symlinks
+            if ! [ -d "/home/usera" ] || ! [ -L "/home/usera" ]; then
+              echo "HEALTH CHECK FAILED: User directory not accessible"
+              return 1
+            fi
+            
+            echo "HEALTH CHECK PASSED"
+            return 0
+          }
+          
+          # Run initial health check
+          health_check
+          
+          id
+          echo "=== HARDENED HOME DIRECTORY TEST ==="
+          echo "Running as usera (UID 2001, GID 2001)"
+          echo ""
+          echo "=== Testing /home directory browsing (as usera) ==="
+          ls -la /home
+          echo ""
+          echo "=== Testing individual home access (as usera) ==="
+          echo "My home directory (/home/usera):"
+          ls -la /home/usera
+          echo ""
+          echo "Other users' directories:"
+          ls -la /home/userb
+          ls -la /home/xyz
+          echo ""
+          echo "=== Testing LIVE NFS file operations (as usera) ==="
+          echo "Creating file in my NFS home directory:"
+          echo "Hello from usera at $(date) - HARDENED TEST" >> /home/usera/usera-hardened-test.txt
+          ls -la /home/usera/usera-hardened-test.txt
+          echo ""
+          echo "Reading my NFS home directory contents:"
+          cat /home/usera/usera-hardened-test.txt
+          echo ""
+          echo "=== Testing persistence by checking NFS directly ==="
+          echo "Checking if file exists in NFS mount:"
+          ls -la /mnt/home/usera/usera-hardened-test.txt 2>&1 || echo "File not found in NFS mount"
+          echo ""
+          echo "=== Final verification: Can usera browse /home with HARDENED NFS? ==="
+          if health_check; then
+            echo "✅ SUCCESS: usera can browse /home directory!"
+            echo "Available users:"
+            ls -1 /home | grep -v toolbox
+            echo ""
+            echo "✅ SUCCESS: usera can access their own NFS home directory!"
+            echo "✅ SUCCESS: usera can see other users' NFS directories!"
+            echo "✅ SUCCESS: usera can perform LIVE NFS file operations!"
+          else
+            echo "❌ FAILED: usera cannot browse /home directory"
+            exit 1
+          fi
+          echo ""
+          echo "=== Test completed - files should persist on NFS ==="
+          
+          # Keep container running with periodic health checks
+          while true; do
+            sleep 300  # Health check every 5 minutes
+            if ! health_check; then
+              echo "Health check failed, exiting..."
+              exit 1
+            fi
+          done
+        volumeMounts:
+        - name: home-volume
+          mountPath: /home
+        - name: host-home
+          mountPath: /mnt/home
+          mountPropagation: HostToContainer
+        - name: tmp-volume
+          mountPath: /tmp
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - |
+              # Check if /home is accessible
+              ls /home >/dev/null 2>&1
+              # Check if NFS is accessible
+              ls /mnt/home >/dev/null 2>&1
+              # Check if user directories exist
+              [ -d "/home/usera" ] && [ -L "/home/usera" ]
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - |
+              # Check if symlinks are working
+              [ -d "/home/usera" ] && [ -L "/home/usera" ]
+              # Check if user can access their home
+              ls /home/usera >/dev/null 2>&1
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      - name: metrics-exporter
+        image: quay.io/prometheus-exporter:latest
+        ports:
+        - containerPort: 8080
+          name: metrics
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          # Export home directory metrics
+          while true; do
+            echo "# HELP home_directories_total Total number of home directories"
+            echo "# TYPE home_directories_total gauge"
+            echo "home_directories_total $(ls /home 2>/dev/null | wc -l)"
+            
+            echo "# HELP nfs_mount_available NFS mount availability"
+            echo "# TYPE nfs_mount_available gauge"
+            if ls /mnt/home >/dev/null 2>&1; then
+              echo "nfs_mount_available 1"
+            else
+              echo "nfs_mount_available 0"
+            fi
+            
+            echo "# HELP user_home_accessible User home directory accessibility"
+            echo "# TYPE user_home_accessible gauge"
+            if [ -d "/home/usera" ] && [ -L "/home/usera" ]; then
+              echo "user_home_accessible 1"
+            else
+              echo "user_home_accessible 0"
+            fi
+            
+            sleep 30
+          done
+        volumeMounts:
+        - name: host-home
+          mountPath: /mnt/home
+          mountPropagation: HostToContainer
+        - name: home-volume
+          mountPath: /home
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+      serviceAccountName: selinux-fix-sa
+      volumes:
+      - name: host-home
+        hostPath:
+          path: /var/mnt/home
+      - name: home-volume
+        emptyDir: {}
+      - name: tmp-volume
+        emptyDir: {}

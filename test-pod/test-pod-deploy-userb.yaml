@@ -24,9 +24,28 @@ spec:
         args:
         - |
           id
-          ls -la /home
+          echo "=== Testing /home directory access ==="
+          ls -la /home || echo "Cannot browse /home (SELinux limitation)"
+          echo "=== Creating browsable home directory ==="
+          # Create a browsable directory by creating symlinks
+          mkdir -p /home-browsable
+          for user in usera userb userc userd usere xyz; do
+            if [ -d "/home/$user" ]; then
+              ln -sf "/home/$user" "/home-browsable/$user"
+              echo "Created symlink for $user"
+            fi
+          done
+          echo "=== Testing browsable home directory ==="
+          ls -la /home-browsable/
+          echo "=== Testing individual directories ==="
+          ls -la /home/userb
+          ls -la /home/xyz
+          echo "=== Testing file operations ==="
           echo $(date) hello from userb:$HOSTNAME >> /home/userb/hello.txt
           echo $(date) hello shared from userb:$HOSTNAME >> /home/xyz/hello.txt
+          echo "=== Testing write permissions ==="
+          echo "test write" > /home/userb/test-write.txt
+          ls -la /home/userb/test-write.txt
           sleep infinity
         volumeMounts:
         - name: host-home
@@ -41,6 +60,9 @@ spec:
         - name: users-csv
           mountPath: /toolbox/users.csv
           subPath: users.csv
+        - name: setup-home-access
+          mountPath: /toolbox/setup-home-access.sh
+          subPath: setup-home-access.sh
       serviceAccountName: test-pod
       volumes:
       - name: host-home
@@ -55,4 +77,7 @@ spec:
       - name: users-csv
         configMap:
           name: nfs-server-init-ftk5687cbh
+      - name: setup-home-access
+        configMap:
+          name: setup-home-access
 

@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: home-access-network-policy
+  namespace: automount-nfs-poc
+spec:
+  podSelector:
+    matchLabels:
+      app: test-pod-hardened
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: test-pod-hardened
+    - podSelector:
+        matchLabels:
+          app: automount
+    - podSelector:
+        matchLabels:
+          app: nfs-server
+    - podSelector:
+        matchLabels:
+          app: ldap
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: nfs-server
+    ports:
+    - protocol: TCP
+      port: 2049
+  - to:
+    - podSelector:
+        matchLabels:
+          app: ldap
+    ports:
+    - protocol: TCP
+      port: 389
+  - to: []  # Allow DNS resolution
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  - to: []  # Allow monitoring
+    ports:
+    - protocol: TCP
+      port: 8080

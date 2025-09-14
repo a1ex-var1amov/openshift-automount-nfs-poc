@@ -1,0 +1,55 @@
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: selinux-fix-scc-hardened
+  annotations:
+    kubernetes.io/description: "Hardened SCC for home directory access with minimal privileges"
+allowHostDirVolumePlugin: true
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: false  # Changed from true
+allowPrivilegedContainer: false  # Changed from true
+allowedCapabilities:
+- CHOWN
+- FOWNER
+# Removed: SYS_ADMIN, DAC_OVERRIDE, SETUID, SETGID
+defaultAddCapabilities: null
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 2001
+    max: 2005
+groups: []
+priority: 10  # Higher priority than default
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- ALL  # Drop all capabilities by default
+runAsUser:
+  type: MustRunAs
+  ranges:
+  - min: 2001
+    max: 2005
+seLinuxContext:
+  type: MustRunAs
+  seLinuxOptions:
+    type: "spc_t"
+    level: "s0:c28,c7"
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 2001
+    max: 2005
+  - min: 1000770000
+    max: 1000770000
+users:
+- system:serviceaccount:automount-nfs-poc:selinux-fix-sa
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+- hostPath

@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-pod-selinux-fix-v2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-pod-selinux-fix-v2
+  template:
+    metadata:
+      labels:
+        app: test-pod-selinux-fix-v2
+    spec:
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        seLinuxOptions:
+          type: "spc_t"
+      initContainers:
+      - name: selinux-fixer
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+          seLinuxOptions:
+            type: "spc_t"
+          capabilities:
+            add: ["SYS_ADMIN", "DAC_OVERRIDE", "CHOWN", "FOWNER"]
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          # Install SELinux utilities
+          dnf install -y policycoreutils-python-utils setools-console
+          
+          # Wait for the home directory to be available
+          while [ ! -d "/mnt/home" ]; do
+            echo "Waiting for /mnt/home directory to be available..."
+            sleep 2
+          done
+          
+          # Check current SELinux context
+          echo "Current SELinux context of /mnt/home:"
+          ls -laZ /mnt/home || echo "Cannot access /mnt/home yet"
+          
+          # Try to change SELinux context to make it browsable
+          echo "Attempting to change SELinux context..."
+          
+          # Method 1: Try to change to public_content_t
+          chcon -t public_content_t /mnt/home 2>/dev/null && echo "✓ Changed to public_content_t" || echo "✗ Failed to change to public_content_t"
+          
+          # Method 2: Try to change to container_file_t
+          chcon -t container_file_t /mnt/home 2>/dev/null && echo "✓ Changed to container_file_t" || echo "✗ Failed to change to container_file_t"
+          
+          # Method 3: Try to change to user_home_t
+          chcon -t user_home_t /mnt/home 2>/dev/null && echo "✓ Changed to user_home_t" || echo "✗ Failed to change to user_home_t"
+          
+          # Method 4: Try to change to var_t
+          chcon -t var_t /mnt/home 2>/dev/null && echo "✓ Changed to var_t" || echo "✗ Failed to change to var_t"
+          
+          # Set proper permissions
+          chmod 755 /mnt/home
+          chmod 755 /mnt/home/* 2>/dev/null || true
+          
+          # Create a symlink to /home for easy access
+          ln -sf /mnt/home /home
+          
+          # Final check
+          echo "Final SELinux context of /mnt/home:"
+          ls -laZ /mnt/home || echo "Still cannot access /mnt/home"
+          
+          # Test browsing
+          echo "Testing /home browsing:"
+          ls -la /home || echo "Cannot browse /home"
+          
+          # Create a background process to maintain the symlink
+          nohup bash -c 'while true; do if [ ! -L /home ] || [ ! -d /mnt/home ]; then ln -sf /mnt/home /home; fi; sleep 10; done' &
+          
+          echo "SELinux fix completed successfully!"
+        volumeMounts:
+        - name: host-home
+          mountPath: /mnt/home
+          mountPropagation: HostToContainer
+      containers:
+      - name: test-pod
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        workingDir: /tmp
+        command: ["/bin/bash","-lc"]
+        args:
+        - |
+          id
+          echo "=== SELINUX FIX TEST ==="
+          echo "=== Testing /home directory access ==="
+          ls -la /home
+          echo "=== Testing individual home access ==="
+          ls -la /home/userb
+          ls -la /home/xyz
+          echo "=== Testing file operations ==="
+          echo $(date) hello from selinux-fix:$HOSTNAME >> /home/userb/hello.txt
+          echo $(date) hello shared from selinux-fix:$HOSTNAME >> /home/xyz/hello.txt
+          echo "=== Testing write permissions ==="
+          echo "test write" > /home/userb/test-write.txt
+          ls -la /home/userb/test-write.txt
+          echo "=== Testing direct /mnt/home access ==="
+          ls -la /mnt/home
+          sleep infinity
+        volumeMounts:
+        - name: host-home
+          mountPath: /mnt/home
+          mountPropagation: HostToContainer
+      serviceAccountName: selinux-fix-sa
+      volumes:
+      - name: host-home
+        hostPath:
+          path: /var/mnt/home

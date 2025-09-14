@@ -7,10 +7,8 @@ dnf install --assumeyes \
   openldap-clients
 
 mkdir -p /mnt/automount
+mkdir -p /var/mnt/nfs-home
 mkdir -p /var/mnt/home
-
-# Set proper permissions for home directory
-chmod 755 /var/mnt/home
 
 # Start the autofs in background
 automount \
@@ -21,8 +19,33 @@ automount \
 # Wait a moment for automount to start
 sleep 5
 
-# Set permissions on the mount point after automount starts
-chmod 755 /var/mnt/home
+# Create a bind mount solution
+# Mount the NFS home directory to a regular directory that can be browsed
+while true; do
+  # Check if NFS mount is available
+  if [ -d "/var/mnt/nfs-home" ] && [ "$(ls -A /var/mnt/nfs-home 2>/dev/null)" ]; then
+    # Create a regular directory for bind mounting
+    mkdir -p /var/mnt/home-regular
+    
+    # Bind mount the NFS content to a regular directory
+    mount --bind /var/mnt/nfs-home /var/mnt/home-regular
+    
+    # Set proper permissions on the bind mount
+    chmod 755 /var/mnt/home-regular
+    chmod 755 /var/mnt/home-regular/* 2>/dev/null || true
+    
+    # Try to fix SELinux context
+    chcon -t public_content_t /var/mnt/home-regular 2>/dev/null || true
+    chcon -t public_content_t /var/mnt/home-regular/* 2>/dev/null || true
+    
+    echo "Bind mount created successfully"
+    break
+  else
+    echo "Waiting for NFS mount to be available..."
+  fi
+  
+  sleep 5
+done
 
 # Keep the script running
 wait

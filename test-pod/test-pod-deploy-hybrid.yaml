@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-pod-hybrid
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-pod-hybrid
+  template:
+    metadata:
+      labels:
+        app: test-pod-hybrid
+    spec:
+      securityContext:
+        runAsUser: 2002
+        runAsGroup: 2002
+        supplementalGroups: [2002]
+      initContainers:
+      - name: nfs-mounter
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          # Install NFS utilities
+          dnf install -y nfs-utils
+          
+          # Create mount points
+          mkdir -p /shared/home
+          mkdir -p /shared/home-individual
+          
+          # Mount NFS directly with multiple SELinux context attempts
+          # Try different contexts to find one that works
+          for context in "system_u:object_r:user_home_t:s0" "system_u:object_r:public_content_t:s0" "system_u:object_r:nfs_t:s0"; do
+            echo "Trying SELinux context: $context"
+            if mount -t nfs -o rw,vers=3,context="$context" 172.30.240.59:/exports/home /shared/home 2>/dev/null; then
+              echo "Successfully mounted with context: $context"
+              break
+            fi
+          done
+          
+          # If all contexts failed, try without context
+          if ! mount | grep -q "/shared/home"; then
+            echo "Trying without SELinux context"
+            mount -t nfs -o rw,vers=3 172.30.240.59:/exports/home /shared/home
+          fi
+          
+          # Set proper permissions
+          chmod 755 /shared/home
+          chown 2002:2002 /shared/home
+          
+          # Create individual symlinks for each user directory
+          for user in usera userb userc userd usere xyz; do
+            if [ -d "/shared/home/$user" ]; then
+              ln -sf "/shared/home/$user" "/shared/home-individual/$user"
+              chown -h 2002:2002 "/shared/home-individual/$user"
+            fi
+          done
+          
+          # Set permissions on the individual directory
+          chmod 755 /shared/home-individual
+          chown 2002:2002 /shared/home-individual
+          
+          # Show mount information
+          mount | grep nfs
+          ls -la /shared/home
+        volumeMounts:
+        - name: shared-home
+          mountPath: /shared/home
+        - name: shared-home-individual
+          mountPath: /shared-home-individual
+      containers:
+      - name: test-pod
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        workingDir: /tmp
+        command: ["/bin/bash","-lc"]
+        args:
+        - |
+          id
+          echo "=== Testing hybrid NFS mount approach ==="
+          echo "=== Testing /home directory access ==="
+          ls -la /home
+          echo "=== Testing individual home access ==="
+          ls -la /home-individual/
+          echo "=== Testing direct access to user directories ==="
+          ls -la /home/userb
+          ls -la /home/xyz
+          echo "=== Testing file operations ==="
+          echo $(date) hello from hybrid:$HOSTNAME >> /home/userb/hello.txt
+          echo $(date) hello shared from hybrid:$HOSTNAME >> /home/xyz/hello.txt
+          echo "=== Testing write permissions ==="
+          echo "test write" > /home/userb/test-write.txt
+          ls -la /home/userb/test-write.txt
+          sleep infinity
+        volumeMounts:
+        - name: shared-home
+          mountPath: /home
+        - name: shared-home-individual
+          mountPath: /home-individual
+      serviceAccountName: test-pod
+      volumes:
+      - name: shared-home
+        emptyDir: {}
+      - name: shared-home-individual
+        emptyDir: {}

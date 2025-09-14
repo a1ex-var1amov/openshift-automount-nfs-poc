@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: selinux-fix-sa
+  namespace: automount-nfs-poc
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: automount-nfs-poc
+  name: selinux-fix-role
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: selinux-fix-rolebinding
+  namespace: automount-nfs-poc
+subjects:
+- kind: ServiceAccount
+  name: selinux-fix-sa
+  namespace: automount-nfs-poc
+roleRef:
+  kind: Role
+  name: selinux-fix-role
+  apiGroup: rbac.authorization.k8s.io

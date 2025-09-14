@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-pod-sidecar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-pod-sidecar
+  template:
+    metadata:
+      labels:
+        app: test-pod-sidecar
+    spec:
+      securityContext:
+        runAsUser: 2002
+        runAsGroup: 2002
+        supplementalGroups: [2002]
+      initContainers:
+      - name: setup-home
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          # Install NFS utilities
+          dnf install -y nfs-utils
+          
+          # Create mount points
+          mkdir -p /shared/nfs-home
+          mkdir -p /shared/home-browsable
+          
+          # Mount NFS directly
+          mount -t nfs -o rw,vers=3 172.30.240.59:/exports/home /shared/nfs-home
+          
+          # Create a browsable directory by copying the structure
+          # This bypasses the autofs SELinux context issue
+          cp -r /shared/nfs-home/* /shared/home-browsable/ 2>/dev/null || true
+          
+          # Set proper permissions
+          chmod 755 /shared/home-browsable
+          chmod 755 /shared/home-browsable/*
+          chown -R 2002:2002 /shared/home-browsable
+          
+          # Create a script that keeps the directory in sync
+          cat > /shared/sync-home.sh << 'EOF'
+          #!/bin/bash
+          while true; do
+            # Sync changes from NFS to browsable directory
+            rsync -a --delete /shared/nfs-home/ /shared/home-browsable/ 2>/dev/null || true
+            chmod 755 /shared/home-browsable
+            chmod 755 /shared/home-browsable/*
+            chown -R 2002:2002 /shared/home-browsable
+            sleep 5
+          done
+          EOF
+          
+          chmod +x /shared/sync-home.sh
+        volumeMounts:
+        - name: shared-home
+          mountPath: /shared
+      containers:
+      - name: home-sync
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          # Keep the home directory in sync
+          /shared/sync-home.sh
+        volumeMounts:
+        - name: shared-home
+          mountPath: /shared
+      - name: test-pod
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        workingDir: /tmp
+        command: ["/bin/bash","-lc"]
+        args:
+        - |
+          id
+          echo "=== Testing sidecar approach ==="
+          echo "=== Testing /home directory access ==="
+          ls -la /home
+          echo "=== Testing individual directories ==="
+          ls -la /home/userb
+          ls -la /home/xyz
+          echo "=== Testing file operations ==="
+          echo $(date) hello from sidecar:$HOSTNAME >> /home/userb/hello.txt
+          echo $(date) hello shared from sidecar:$HOSTNAME >> /home/xyz/hello.txt
+          echo "=== Testing write permissions ==="
+          echo "test write" > /home/userb/test-write.txt
+          ls -la /home/userb/test-write.txt
+          sleep infinity
+        volumeMounts:
+        - name: shared-home
+          mountPath: /home
+          subPath: home-browsable
+      serviceAccountName: test-pod
+      volumes:
+      - name: shared-home
+        emptyDir: {}
