@@ -3,14 +3,18 @@
 # Install nfs server utils and ldap clients
 dnf install nfs-utils openldap-clients -y
 
-# Make nfsd filesystem available with the container
-mount -t nfsd nfds /proc/fs/nfsd
+# Make nfsd pseudo-filesystem available inside the container
+mount -t nfsd nfsd /proc/fs/nfsd
 
-# Start nfs daemons
+# Start NFS daemons
 /usr/sbin/rpcbind -w
-/usr/sbin/rpc.mountd -N 4 -V 4
-/usr/sbin/rpc.nfsd -G 10 -N 4 -V 4
+/usr/sbin/rpc.mountd   # mountd is required for v2/v3; use defaults
 /usr/sbin/rpc.statd --no-notify
+
+# Configure NFS versions: enable v3 only (disable v2 and v4)
+echo 0 > /proc/fs/nfsd/threads || true
+echo "-2 +3 -4" > /proc/fs/nfsd/versions || true
+/usr/sbin/rpc.nfsd 8
 
 # Create directories
 for CITY in dallas tucson sandiego; do
