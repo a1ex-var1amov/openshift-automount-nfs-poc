@@ -114,15 +114,15 @@ spec:
           echo ""
           echo "=== Final verification: Can usera browse /home with LIVE NFS? ==="
           if ls /home >/dev/null 2>&1; then
-            echo "✅ SUCCESS: usera can browse /home directory!"
+            echo "!!!SUCCESS: usera can browse /home directory!"
             echo "Available users:"
             ls -1 /home | grep -v toolbox
             echo ""
-            echo "✅ SUCCESS: usera can access their own NFS home directory!"
-            echo "✅ SUCCESS: usera can see other users' NFS directories!"
-            echo "✅ SUCCESS: usera can perform LIVE NFS file operations!"
+            echo "!!!SUCCESS: usera can access their own NFS home directory!"
+            echo "!!!SUCCESS: usera can see other users' NFS directories!"
+            echo "!!!SUCCESS: usera can perform LIVE NFS file operations!"
           else
-            echo "❌ FAILED: usera cannot browse /home directory"
+            echo "!!!FAILED: usera cannot browse /home directory"
           fi
           echo ""
           echo "=== Test completed - files should persist on NFS ==="
