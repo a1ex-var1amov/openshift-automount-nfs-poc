@@ -96,3 +96,104 @@ oc exec -n automount-nfs-poc -l app=automount -- timeout 10 ls -la /var/mnt/home
 - This is a host-level change affecting all containers on the labeled nodes.
 - Keep the policy minimal; the provided rules only allow read/traverse of autofs mountpoints.
 - Alternative: avoid autofs_t entirely by pre-mounting NFS on the host to a static path labeled `container_file_t` and using HostPath into pods.
+
+# Breakdown of `allow-container-autofs.te`
+
+## Module Declaration
+
+``` te
+module allow-container-autofs 1.0;
+```
+
+Declares a named policy module (`allow-container-autofs`) with version
+1.0.\
+This is required by `semodule` for install/upgrade.
+
+------------------------------------------------------------------------
+
+## Requirements
+
+``` te
+require {
+    type container_t;
+    type autofs_t;
+    class dir { getattr search open read };
+    class lnk_file { read getattr };
+}
+```
+
+-   **type container_t**\
+    Domain type for most container processes on OpenShift (the confined
+    process type your pods run as).
+
+-   **type autofs_t**\
+    Type for autofs-managed mountpoints (the indirect root like
+    `/var/mnt/home`).
+
+-   **class dir { getattr search open read }**\
+    Represents the directory object class. Grants specific read/traverse
+    permissions on directories labeled `autofs_t`.
+
+-   **class lnk_file { read getattr }**\
+    Represents the symlink object class. Grants permissions for reading
+    symlink metadata and targets.
+
+------------------------------------------------------------------------
+
+## Allow Rules
+
+### Directory Permissions
+
+``` te
+allow container_t autofs_t:dir { getattr search open read };
+```
+
+Grants container processes (`container_t`) the **minimum** directory
+permissions on `autofs_t` directories: - `getattr`: Read metadata (e.g.,
+`ls -ld`, `stat`). - `search`: Traverse permission (needed to walk into
+the directory). - `open`: Allow opening the directory handle (needed by
+list operations). - `read`: Read directory entries (needed for
+listing/`ls`).
+
+**Effect:** Enables "parent browse" of the autofs mount root (e.g.,
+`ls -la /var/mnt/home`) so pod processes can see the list of users.
+
+------------------------------------------------------------------------
+
+### Symlink Permissions
+
+``` te
+allow container_t autofs_t:lnk_file { read getattr };
+```
+
+Grants minimal permissions on symlinks under the `autofs_t` mount: -
+`getattr`: Get symlink metadata. - `read`: Read the link target (so the
+VFS can resolve it).
+
+**Effect:** Allows autofs to present link-like entries during
+resolution.
+
+------------------------------------------------------------------------
+
+## Why Only These Permissions?
+
+-   **Principle of least privilege:**\
+    Only read/lookup/traverse on the `autofs_t` mountpoint.\
+    No write/append/rename/remove permissions → policy doesn't allow
+    modifying the autofs root.
+
+-   **NFS writes unaffected:**\
+    Actual NFS-mounted directory types (`nfs_t` on host,
+    `container_file_t` inside containers via hostPath) and NFS server
+    export settings (`root_squash`, UID/GID ownership) control write
+    behavior.
+
+------------------------------------------------------------------------
+
+## High-Level Behavior Enabled
+
+-   **Before:** `ls /var/mnt/home` failed/denied from pods
+    (`container_t` blocked on `autofs_t`).\
+-   **After:** Pods can list/traverse `/var/mnt/home`, discover
+    subdirectories, and trigger automount to mount individual user
+    directories on-demand.
