@@ -1,0 +1,33 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 98-allow-container-autofs
+  labels:
+    machineconfiguration.openshift.io/role: worker
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      files:
+      - path: /etc/selinux/allow-container-autofs.pp
+        mode: 0644
+        contents:
+          source: data:text/plain;base64,<BASE64_OF_PP>
+    systemd:
+      units:
+      - name: selinux-install-autofs-policy.service
+        enabled: true
+        contents: |
+          [Unit]
+          Description=Install SELinux policy to allow container_t to traverse autofs_t
+          After=network-online.target
+          ConditionPathExists=/etc/selinux/allow-container-autofs.pp
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/sbin/semodule -i /etc/selinux/allow-container-autofs.pp
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+module allow-container-autofs 1.0;
+
+require {
+    type container_t;
+    type autofs_t;
+    class dir { getattr search open read };
+    class lnk_file { read getattr };
+}
+
+# Allow containers (container_t) to traverse and read autofs-managed
+# directories (autofs_t) so that indirect autofs mount points under
+# /var/mnt/home become browseable from inside pods.
+allow container_t autofs_t:dir { getattr search open read };
+allow container_t autofs_t:lnk_file { read getattr };
+
+
