@@ -85,6 +85,37 @@ SELinux notes:
 - Mount propagation: DaemonSet `/mnt` is `Bidirectional`, pod mounts are `HostToContainer` as required.
 ```
 
+## Optional: SELinux host policy (RHCOS) to enable browsing autofs parent
+
+By default, containers (type `container_t`) cannot traverse the autofs root (`autofs_t`), so listing `/var/mnt/home` from pods fails even though individual submounts work. If you prefer host-level SELinux fix (no init container), apply the minimal policy in `selinux/`:
+
+- `selinux/allow-container-autofs.te` (policy source)
+- `selinux/machineconfig-allow-container-autofs.yaml` (MachineConfig template)
+- `selinux/README.md` (build/apply/verify steps)
+
+Quick steps:
+
+1) Build policy package on a RHEL/Fedora host:
+```
+checkmodule -M -m -o allow-container-autofs.mod selinux/allow-container-autofs.te
+semodule_package -o allow-container-autofs.pp -m allow-container-autofs.mod
+BASE64_PP=$(base64 -w0 allow-container-autofs.pp)
+```
+2) Put `BASE64_PP` into `selinux/machineconfig-allow-container-autofs.yaml` (replace `<BASE64_OF_PP>`), then:
+```
+oc apply -f selinux/machineconfig-allow-container-autofs.yaml
+oc get mcp; oc describe mcp worker   # wait until updated
+```
+3) Verify on a worker and from pods:
+```
+oc debug node/<worker>; chroot /host semodule -l | grep allow-container-autofs
+oc exec -n automount-nfs-poc -l app=automount -- timeout 10 ls -la /var/mnt/home
+```
+
+Notes:
+- Host-wide change; grants only read/traverse on `autofs_t` (least privilege).
+- Alternative: pre-mount NFS on the node under a path labeled `container_file_t` and use HostPath in pods.
+
 ## Cleaning up
 
 ```
