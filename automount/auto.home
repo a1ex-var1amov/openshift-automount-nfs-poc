@@ -1,4 +1,4 @@
-xyz -rw,vers=4 /exports:/exports/home/xyz
-*   -rw,vers=4 /exports:/exports/home/&
+xyz -rw,vers=3 172.30.143.187:/exports/home/xyz
+*   -rw,vers=3 172.30.143.187:/exports/home/&
 
 

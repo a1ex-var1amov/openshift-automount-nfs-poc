@@ -9,6 +9,7 @@ spec:
   - name: test
     image: quay.io/a13x22/toolbox-container:basic
     imagePullPolicy: Always
+    workingDir: /tmp
     securityContext:
       runAsUser: 2002
       runAsGroup: 2002
@@ -19,21 +20,16 @@ spec:
     args:
       - |
         id
-        echo "=== /mnt/home ==="; ls -la /mnt/home || true
-        echo "=== /home ==="; ls -la /home || true
-        echo "=== /home/userb ==="; ls -la /home/userb || true
+        echo "=== /home (autofs) ==="; ls -la /home || true
+        echo "=== trigger autofs mount for userb ==="; ls -la /home/userb || true
         echo "write/read:"; echo "from userb $(date)" >> /home/userb/selinux-policy-test.txt || true
         ls -la /home/userb/selinux-policy-test.txt || true
         cat /home/userb/selinux-policy-test.txt || true
         sleep 3600
     volumeMounts:
     - name: host-home-all
-      mountPath: /mnt/home
+      mountPath: /home
       mountPropagation: HostToContainer
-    - name: host-home-userb
-      mountPath: /home/userb
   volumes:
   - name: host-home-all
-    hostPath: { path: /var/mnt/home }
-  - name: host-home-userb
-    hostPath: { path: /var/mnt/home/userb }
+    hostPath: { path: /var/mnt/home, type: Directory }
