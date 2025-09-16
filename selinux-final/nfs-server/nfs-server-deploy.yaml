@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nfs-server
+  template:
+    metadata:
+      labels:
+        app: nfs-server
+    spec:
+      containers:
+      - name: nfs-server
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: init
+          mountPath: /toolbox
+        - name: exports
+          mountPath: /exports
+      serviceAccountName: nfs-server
+      volumes:
+      - name: init
+        configMap:
+          name: nfs-server-init
+      - name: exports
+        persistentVolumeClaim:
+          claimName: nfs-server-exports

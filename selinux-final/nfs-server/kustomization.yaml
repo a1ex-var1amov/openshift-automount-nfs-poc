@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: automount-nfs-poc
+
+images:
+- name: quay.io/a13x22/toolbox-container
+  newTag: basic
+
+configMapGenerator:
+- name: nfs-server-init
+  files:
+  - init.sh
+  - users.csv
+
+resources:
+- nfs-server-deploy.yaml
+- nfs-server-exports-pvc.yaml
+- nfs-server-sa.yaml
+- nfs-server-scc-rolebinding.yaml
+- nfs-server-scc-role.yaml
+- nfs-server-svc.yaml

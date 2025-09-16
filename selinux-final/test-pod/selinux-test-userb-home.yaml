@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: selinux-test-userb-home
+  namespace: automount-nfs-poc
+spec:
+  serviceAccountName: test-pod
+  containers:
+  - name: test
+    image: quay.io/a13x22/toolbox-container:basic
+    imagePullPolicy: Always
+    workingDir: /tmp
+    securityContext:
+      runAsUser: 2002
+      runAsGroup: 2002
+    env:
+    - name: HOME
+      value: /home/userb
+    command: ["/bin/bash","-lc"]
+    args:
+      - |
+        id
+        echo "=== /home (autofs) ==="; ls -la /home || true
+        echo "=== trigger autofs mount for userb ==="; ls -la /home/userb || true
+        echo "write/read:"; echo "from userb $(date)" >> /home/userb/selinux-policy-test.txt || true
+        ls -la /home/userb/selinux-policy-test.txt || true
+        cat /home/userb/selinux-policy-test.txt || true
+        sleep 3600
+    volumeMounts:
+    - name: host-home-all
+      mountPath: /home
+      mountPropagation: HostToContainer
+  volumes:
+  - name: host-home-all
+    hostPath: { path: /var/mnt/home, type: Directory }
