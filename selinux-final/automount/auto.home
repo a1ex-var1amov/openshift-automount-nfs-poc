@@ -1,4 +1,6 @@
 xyz -rw,vers=3 172.30.183.177:/exports/home/xyz
+usera -rw,vers=3 172.30.183.177:/exports/home/usera
+userb -rw,vers=3 172.30.183.177:/exports/home/userb
 *   -rw,vers=3 172.30.183.177:/exports/home/&
 
 
