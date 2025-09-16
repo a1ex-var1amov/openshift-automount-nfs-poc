@@ -3,4 +3,5 @@ kind: Kustomization
 resources:
 - nfs-server
 - automount
+- test-pod/test-pod-sa.yaml
 - test-pod/selinux-test-userb-home.yaml
