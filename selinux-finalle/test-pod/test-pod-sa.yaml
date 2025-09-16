@@ -1,0 +1,6 @@
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: test-pod
+  namespace: automount-nfs-poc
+

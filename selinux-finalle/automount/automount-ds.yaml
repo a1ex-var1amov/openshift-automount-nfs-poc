@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: automount
+spec:
+  selector:
+    matchLabels:
+      app: automount
+  template:
+    metadata:
+      labels:
+        app: automount
+    spec:
+      containers:
+      - name: automount
+        image: quay.io/a13x22/toolbox-container:basic
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: run
+          mountPath: /toolbox
+        - name: conf
+          mountPath: /etc/auto.master.d/extra.autofs
+          subPath: extra.autofs
+        - name: conf
+          mountPath: /etc/extra.nfs
+          subPath: extra.nfs
+        - name: conf
+          mountPath: /etc/auto.home
+          subPath: auto.home
+        - name: host
+          mountPath: /var/mnt
+          # Bidirectional mount propagation is required
+          mountPropagation: Bidirectional
+      serviceAccountName: automount
+      # For automount to work hostPID=true is required
+      hostPID: true
+      # Need to reach rpcbind on 127.0.0.1:111
+      hostNetwork: true
+      # Run on Linux nodes only
+      nodeSelector:
+        kubernetes.io/os: linux
+      volumes:
+      - name: run
+        configMap:
+          name: automount-run
+      - name: conf
+        configMap:
+          name: automount-conf
+      - name: host
+        hostPath:
+          path: /var/mnt

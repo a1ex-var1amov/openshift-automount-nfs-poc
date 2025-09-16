@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: automount-nfs-poc
+
+images:
+- name: quay.io/a13x22/toolbox-container
+  newTag: basic
+
+configMapGenerator:
+- name: automount-run
+  files:
+  - run.sh
+- name: automount-conf
+  files:
+  - extra.autofs
+  - extra.nfs
+  - auto.home
+
+resources:
+- automount-ds.yaml
+- automount-sa.yaml
+- automount-scc-rolebinding.yaml
+- automount-scc-role.yaml

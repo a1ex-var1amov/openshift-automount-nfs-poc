@@ -1,0 +1,6 @@
+xyz   -rw,vers=3,context=system_u:object_r:container_file_t:s0 192.168.88.210:/exports/home/xyz
+usera -rw,vers=3,context=system_u:object_r:container_file_t:s0 192.168.88.210:/exports/home/usera
+userb -rw,vers=3,context=system_u:object_r:container_file_t:s0 192.168.88.210:/exports/home/userb
+*     -rw,vers=3,context=system_u:object_r:container_file_t:s0 192.168.88.210:/exports/home/&
+
+
