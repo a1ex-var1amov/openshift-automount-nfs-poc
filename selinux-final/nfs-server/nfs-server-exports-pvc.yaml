@@ -3,7 +3,6 @@ kind: PersistentVolumeClaim
 metadata:
   name: nfs-server-exports
 spec:
-  storageClassName: lvms-vg1
   accessModes:
   - ReadWriteOnce
   resources:
