@@ -1,2 +1,2 @@
 /mnt/automount /etc/extra.nfs --timeout=60
-/var/mnt/home /etc/auto.home --timeout=60 --ghost
+/var/mnt/home /etc/auto.home --timeout=60 --browse
